@@ -1,0 +1,76 @@
+{
+  "name": "kysely-cache",
+  "version": "1.0.0",
+  "description": "Cache layer for kysely",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/alenap93/kysely-cache.git"
+  },
+  "author": "Alessio Napolitano @alenap93",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "keywords": [
+    "cache",
+    "lru",
+    "kysely",
+    "database",
+    "sql",
+    "query-builder"
+  ],
+  "bugs": {
+    "url": "https://github.com/alenap93/kysely-cache/issues"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prettier": "prettier --check src/**/*.ts test/**/*.ts",
+    "prettier:fix": "prettier --write src/**/*.ts test/**/*.ts",
+    "test": "npm run test:node",
+    "test:node": "vitest run --dir ./test",
+    "coverage": "vitest run --coverage",
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.7",
+    "@types/object-hash": "^3.0.6",
+    "@vitest/coverage-v8": "^3.0.2",
+    "better-sqlite3": "^11.8.0",
+    "p-debounce": "^4.0.0",
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.2"
+  },
+  "dependencies": {
+    "cbor": "^10.0.3",
+    "kysely": "^0.27.5",
+    "object-hash": "^3.0.0",
+    "tiny-lru": "^11.2.11"
+  },
+  "files": [
+    "./dist"
+  ] ,
+  "publishConfig": {
+    "access": "public"
+  },
+  "pre-commit": [
+    "prettier",
+    "test",
+    "type-check"
+  ]
+}
