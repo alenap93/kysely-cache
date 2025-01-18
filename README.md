@@ -43,7 +43,9 @@ This cache stores data inside a DB (sqlite, mysql or postgres) and sets a cached
 **How to use**
 
     const sqliteDialect = new SqliteDialect({ database: new Database(':memory:')})
+    
     const kyselyInstance = new Kysely<Database>({ dialect:  sqliteDialect })
+    
     await kyselyInstance.schema
     .createTable('person')
     .addColumn('id', 'integer', (col) => col.primaryKey())
@@ -51,6 +53,7 @@ This cache stores data inside a DB (sqlite, mysql or postgres) and sets a cached
     .addColumn('last_name', 'varchar(255)')
     .addColumn('gender', 'varchar(255)')
     .execute()
+    
     await kyselyInstance
     .insertInto('person')
     .values({
@@ -59,10 +62,13 @@ This cache stores data inside a DB (sqlite, mysql or postgres) and sets a cached
     gender: 'man',
     })
     .execute()
+    
     const kyselyLRUSQLCacheInstance = await KyselyLRUSQLCache.createCache<Database>(opt.config)
+    
     const queryBuilderSelectFrom = kyselyInstance
     .selectFrom('person')
     .selectAll()
+    
     const people = await kyselyLRUSQLCacheInstance.execute(queryBuilderSelectFrom)
 
 ### KyselyLRUCache
