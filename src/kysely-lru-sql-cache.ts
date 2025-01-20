@@ -1,31 +1,27 @@
 import { Kysely, SelectQueryBuilder, SqliteDialect, sql } from 'kysely'
 import { DatabaseCache, TableCache } from './interfaces/db-cache'
-import zlib from 'node:zlib'
 import cbor from 'cbor'
-import { promisify } from 'node:util'
 import pDebounce from 'p-debounce'
 import { LRUCacheSQLOpts } from './interfaces/lru-cache-sql-opts'
 import Database from 'better-sqlite3'
 import { KyselyLRUCachePrimitive } from './classes/kysely-lru-cache-primitive'
 import { QueryCompilers } from './types/query-compilers'
 
-const COMPRESSION_MIN_LENGTH = 512
-
 export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
   kyselyDBCache?: Kysely<DatabaseCache>
 
   private ttl = 60000
   private max = 50
-  private compression = false
+
   private queryCompiler: QueryCompilers = 'sqlite'
 
   private isDestroyed = false
 
   private checkInterval?: NodeJS.Timeout
 
-  private compress = promisify(zlib.gzip)
-  private decompress = promisify(zlib.gunzip)
-
+  /**
+   * check the expired items
+   */
   private checkForExpiredItems = pDebounce(
     async () => {
       await this.kyselyDBCache
@@ -57,7 +53,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
   private constructor(opts: LRUCacheSQLOpts = {}) {
     super()
-    this.compression = opts.compression ?? this.compression
     this.max = opts.max ?? this.max
     this.ttl = opts.ttl ?? this.ttl
     this.queryCompiler = opts.queryCompiler ?? 'sqlite'
@@ -72,28 +67,25 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
     })
   }
 
+  /**
+   * create the KyselyLRUSQLCache instance
+   */
   static async createCache<DB>(
     opts: LRUCacheSQLOpts = {},
   ): Promise<KyselyLRUSQLCache<DB>> {
-    opts.queryCompiler = opts.queryCompiler ?? 'sqlite'
-    if (!opts.dialect) {
-      opts.dialect = new SqliteDialect({
-        database: new Database(':memory:'),
-      })
-    }
 
     const kyselyLRUSQLCacheInstance = new KyselyLRUSQLCache<DB>(opts)
 
-    kyselyLRUSQLCacheInstance.kyselyDBCache = new Kysely<DatabaseCache>({
-      dialect: opts.dialect,
-    })
-
-    await kyselyLRUSQLCacheInstance.syncronize()
+    await kyselyLRUSQLCacheInstance.synchronize()
 
     return kyselyLRUSQLCacheInstance
   }
 
-  private async syncronize(): Promise<void> {
+  /**
+   * synchronize the db with the necessary tables and
+   * run the checkforExpiredItems with setInterval
+   */
+  private async synchronize(): Promise<void> {
     switch (this.queryCompiler) {
       case 'sqlite':
         await this.kyselyDBCache?.transaction().execute(async (trx) => {
@@ -104,7 +96,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .addColumn('value', 'blob')
             .addColumn('expires', 'bigint')
             .addColumn('last_access', 'bigint')
-            .addColumn('compressed', 'smallint')
             .execute()
 
           await trx.schema
@@ -139,7 +130,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .addColumn('value', 'bytea')
             .addColumn('expires', 'bigint')
             .addColumn('last_access', 'bigint')
-            .addColumn('compressed', 'smallint')
             .execute()
 
           await trx.schema
@@ -174,7 +164,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .addColumn('value', sql<string>`mediumblob`)
             .addColumn('expires', 'bigint')
             .addColumn('last_access', 'bigint')
-            .addColumn('compressed', 'smallint')
             .execute()
 
           const checkKeyIndexCount = await trx
@@ -249,13 +238,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
     const expires = Date.now() + this.ttl
 
-    const isToCompress =
-      this.compression && encodedValue.length >= COMPRESSION_MIN_LENGTH
-
-    if (isToCompress) {
-      encodedValue = await this.compress(encodedValue)
-    }
-
     switch (this.queryCompiler) {
       case 'sqlite':
       case 'postgres':
@@ -266,14 +248,12 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             value: encodedValue,
             expires,
             last_access: Date.now(),
-            compressed: isToCompress ? 1 : 0,
           })
           .onConflict((cfclt) =>
             cfclt.column('key').doUpdateSet({
               value: encodedValue,
               expires,
               last_access: Date.now(),
-              compressed: isToCompress ? 1 : 0,
             }),
           )
           .execute()
@@ -286,13 +266,11 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             value: encodedValue,
             expires,
             last_access: Date.now(),
-            compressed: isToCompress ? 1 : 0,
           })
           .onDuplicateKeyUpdate({
             value: encodedValue,
             expires,
             last_access: Date.now(),
-            compressed: isToCompress ? 1 : 0,
           })
           .execute()
         break
@@ -322,7 +300,7 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
               or([eb('expires', '>', Date.now()), eb('expires', 'is', null)]),
             ]),
           )
-          .returning(['value', 'compressed'])
+          .returning(['value'])
           .executeTakeFirst()
         break
       case 'mysql':
@@ -345,7 +323,7 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
             return trx
               .selectFrom('cache')
-              .select(['value', 'compressed'])
+              .select(['value'])
               .where(({ and, eb, or }) =>
                 and([
                   eb('key', '=', this.hashQueryBuilder(queryBuilder)),
@@ -360,20 +338,22 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
         break
     }
 
-    if (getSQLResult?.compressed) {
-      getSQLResult.value = await this.decompress(getSQLResult.value)
-    }
-
     return getSQLResult?.value
       ? cbor.decodeFirst(getSQLResult?.value)
       : undefined
   }
 
+  /**
+   * Clear the cache
+   */
   async clear(): Promise<void> {
     this.checkIfDestroyed()
     await this.kyselyDBCache?.deleteFrom('cache').execute()
   }
 
+  /**
+   * clear the cache and release all resources and disconnects from the cache database
+   */
   async destroy(): Promise<void> {
     await this.clear()
     clearInterval(this.checkInterval)
@@ -381,6 +361,9 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
     this.isDestroyed = true
   }
 
+  /**
+   * check if db has been destroyed
+   */
   private checkIfDestroyed(): void {
     if (this.isDestroyed) {
       throw new Error('Cache has been destroyed')

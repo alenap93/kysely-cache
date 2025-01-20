@@ -9,6 +9,10 @@ import cbor from 'cbor'
 import { SimplifySingleResult } from '../types/simplify-single-result'
 
 export class KyselyLRUCachePrimitive<DB> {
+
+  /**
+   * Execute the query and return the results list
+   */
   async execute<T extends keyof DB, O>(
     queryBuilder: SelectQueryBuilder<DB, T, O>,
   ): Promise<Simplify<O>[]> {
@@ -20,6 +24,10 @@ export class KyselyLRUCachePrimitive<DB> {
     await this.primitiveSet(queryBuilder, result)
     return result
   }
+
+  /**
+   * Execute the query and return the first result
+   */
   async executeTakeFirst<T extends keyof DB, O>(
     queryBuilder: SelectQueryBuilder<DB, T, O>,
   ): Promise<SimplifySingleResult<O>> {
@@ -33,6 +41,11 @@ export class KyselyLRUCachePrimitive<DB> {
     await this.primitiveSet(queryBuilder, result)
     return result
   }
+
+  /**
+   * Execute the query and return the first result or
+   * throw an error if it is not found
+   */
   async executeTakeFirstOrThrow<T extends keyof DB, O>(
     queryBuilder: SelectQueryBuilder<DB, T, O>,
     errorConstructor?: NoResultErrorConstructor | ((node: QueryNode) => Error),

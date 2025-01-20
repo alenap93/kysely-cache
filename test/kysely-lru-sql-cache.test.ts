@@ -1,8 +1,8 @@
-import Database from 'better-sqlite3'
 import { Generated, Kysely, SqliteDialect } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { KyselyLRUSQLCache } from '../src'
 import { DB_CONFIGS } from './util/db-utils'
+import Database from 'better-sqlite3'
 
 export interface Database {
   person: PersonTable
@@ -23,14 +23,15 @@ DB_CONFIGS.map((opt) => {
     let kyselyInstance: Kysely<Database>
 
     beforeEach(async () => {
-      const sqliteDialect = new SqliteDialect({
-        database: new Database(':memory:'),
+      kyselyInstance = new Kysely<Database>({
+        dialect: new SqliteDialect({
+          database: new Database(':memory:'),
+        })
       })
-
-      kyselyInstance = new Kysely<Database>({ dialect: sqliteDialect })
 
       await kyselyInstance.schema
         .createTable('person')
+        .ifNotExists()
         .addColumn('id', 'integer', (col) => col.primaryKey())
         .addColumn('first_name', 'varchar(255)')
         .addColumn('last_name', 'varchar(255)')
@@ -105,7 +106,9 @@ DB_CONFIGS.map((opt) => {
         .selectFrom('person')
         .selectAll()
 
-      await kyselyLRUSQLCacheInstance.execute(queryBuilderSelectFrom)
+      const people = await kyselyLRUSQLCacheInstance.execute(queryBuilderSelectFrom)
+
+      expect(people[0]?.first_name).to.be.eq('Max')
 
       const countCacheAfterSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
@@ -124,44 +127,6 @@ DB_CONFIGS.map((opt) => {
           .executeTakeFirst())!
 
       expect(+countCacheAfterClear.count).to.be.eq(0)
-    })
-
-    it('it compresses result in cache if it is too long and retrieve it', async () => {
-      const kyselyLRUSQLCacheInstance =
-        await KyselyLRUSQLCache.createCache<Database>({
-          ...opt.config,
-          compression: true,
-        })
-
-      await kyselyInstance.deleteFrom('person').execute()
-
-      const insertedID = (await kyselyInstance
-        .insertInto('person')
-        .values({
-          first_name: Buffer.alloc(1024).toString(),
-          gender: 'man',
-          last_name: Buffer.alloc(1024).toString(),
-        })
-        .returning('id')
-        .executeTakeFirst())!
-
-      const queryBuilderSelectFrom = kyselyInstance
-        .selectFrom('person')
-        .selectAll()
-
-      await kyselyLRUSQLCacheInstance.executeTakeFirst(queryBuilderSelectFrom)
-
-      const firstRecordInCache = (await kyselyLRUSQLCacheInstance.kyselyDBCache
-        ?.selectFrom('cache')
-        .select('compressed')
-        .executeTakeFirst())!
-
-      expect(firstRecordInCache.compressed).to.be.eq(1)
-
-      const cachedValue = (await kyselyLRUSQLCacheInstance.executeTakeFirst(
-        queryBuilderSelectFrom,
-      ))!
-      expect(cachedValue.id).to.be.eq(insertedID.id)
     })
 
     it('it has to check if exist record to remove or max elements in cache is reached', async () => {
@@ -198,5 +163,31 @@ DB_CONFIGS.map((opt) => {
 
       expect(+countCacheAfterSecondSelect.count).to.be.eq(1)
     }, 10000)
+
+    it('it has size 1 if same select is executed twice', async () => {
+      const kyselyLRUSQLCacheInstance =
+        await KyselyLRUSQLCache.createCache<Database>(opt.config)
+
+      const kyselySelectQueryBuilderOne = kyselyInstance
+        .selectFrom('person')
+        .selectAll()
+
+      await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderOne)
+
+      const kyselySelectQueryBuilderTwo = kyselyInstance
+        .selectFrom('person')
+        .selectAll()
+
+      const people = await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderTwo)
+
+      const countCacheAfterSecondSelect =
+        (await kyselyLRUSQLCacheInstance.kyselyDBCache
+          ?.selectFrom('cache')
+          .select(({ fn }) => [fn.count<number>('key').as('count')])
+          .executeTakeFirst())!
+
+      expect(+countCacheAfterSecondSelect.count).to.be.eq(1)
+      expect(people[0]?.first_name).to.be.equal('Max')
+    })
   })
 })

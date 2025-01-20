@@ -13,10 +13,16 @@ export class KyselyLRUCache<DB> extends KyselyLRUCachePrimitive<DB> {
     this.cache = lru(max || 50, ttl || 60000)
   }
 
+  /**
+   * create the KyselyLRUCache instance
+   */
   static createCache<DB>(opts: LRUCacheOpts = {}): KyselyLRUCache<DB> {
     return new KyselyLRUCache<DB>(opts)
   }
 
+  /**
+   * Clear the cache
+   */
   clear(): void {
     this.cache?.clear()
   }

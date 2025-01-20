@@ -45,11 +45,13 @@
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.2.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.7",
     "@types/object-hash": "^3.0.6",
     "@vitest/coverage-v8": "^3.0.2",
     "better-sqlite3": "^11.8.0",
+    "kysely-pglite-dialect": "^1.0.2",
     "p-debounce": "^4.0.0",
     "prettier": "^3.4.2",
     "tsup": "^8.3.5",
@@ -64,7 +66,7 @@
   },
   "files": [
     "./dist"
-  ] ,
+  ],
   "publishConfig": {
     "access": "public"
   },

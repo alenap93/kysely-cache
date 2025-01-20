@@ -73,9 +73,10 @@ describe('KyselyLRUCache', () => {
     const kyselySelectQueryBuilder = kyselyInstance
       .selectFrom('person')
       .selectAll()
-    await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilder)
+    const people = await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilder)
 
     expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(people[0]?.first_name).to.be.equal('Max')
   })
 
   it('it has size 1 if same select is executed twice', async () => {
@@ -90,9 +91,10 @@ describe('KyselyLRUCache', () => {
     const kyselySelectQueryBuilderTwo = kyselyInstance
       .selectFrom('person')
       .selectAll()
-    await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilderTwo)
+    const people = await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilderTwo)
 
     expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(people[0]?.first_name).to.be.equal('Max')
   })
 
   it('it has size 2 if is executed 2 different query', async () => {

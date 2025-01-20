@@ -28,7 +28,6 @@ This cache stores data inside a DB (sqlite, mysql or postgres) and sets a cached
 - max:  *max number of items (query results) in cache, default 50*
 - ttl:  *time to live (milliseconds), default: 60000*
 - dialect:  *Kysely Dialect, default: SQLite Dialect with in memory DB*
-- compression:  *if query result has to be compressed, default: false*
 - queryCompiler:  *sqlite, mysql or postgres, default: sqlite*
 
 **Api**

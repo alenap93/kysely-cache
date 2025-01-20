@@ -7,5 +7,4 @@ export interface TableCache {
   value: Buffer
   expires: number
   last_access: number
-  compressed: number
 }
