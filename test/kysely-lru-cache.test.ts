@@ -73,7 +73,9 @@ describe('KyselyLRUCache', () => {
     const kyselySelectQueryBuilder = kyselyInstance
       .selectFrom('person')
       .selectAll()
-    const people = await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilder)
+    const people = await kyselyLRUCacheInstance.execute(
+      kyselySelectQueryBuilder,
+    )
 
     expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
     expect(people[0]?.first_name).to.be.equal('Max')
@@ -91,7 +93,9 @@ describe('KyselyLRUCache', () => {
     const kyselySelectQueryBuilderTwo = kyselyInstance
       .selectFrom('person')
       .selectAll()
-    const people = await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilderTwo)
+    const people = await kyselyLRUCacheInstance.execute(
+      kyselySelectQueryBuilderTwo,
+    )
 
     expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
     expect(people[0]?.first_name).to.be.equal('Max')

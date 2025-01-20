@@ -73,7 +73,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
   static async createCache<DB>(
     opts: LRUCacheSQLOpts = {},
   ): Promise<KyselyLRUSQLCache<DB>> {
-
     const kyselyLRUSQLCacheInstance = new KyselyLRUSQLCache<DB>(opts)
 
     await kyselyLRUSQLCacheInstance.synchronize()

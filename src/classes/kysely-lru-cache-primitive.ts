@@ -9,7 +9,6 @@ import cbor from 'cbor'
 import { SimplifySingleResult } from '../types/simplify-single-result'
 
 export class KyselyLRUCachePrimitive<DB> {
-
   /**
    * Execute the query and return the results list
    */

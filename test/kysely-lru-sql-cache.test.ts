@@ -26,7 +26,7 @@ DB_CONFIGS.map((opt) => {
       kyselyInstance = new Kysely<Database>({
         dialect: new SqliteDialect({
           database: new Database(':memory:'),
-        })
+        }),
       })
 
       await kyselyInstance.schema
@@ -106,7 +106,9 @@ DB_CONFIGS.map((opt) => {
         .selectFrom('person')
         .selectAll()
 
-      const people = await kyselyLRUSQLCacheInstance.execute(queryBuilderSelectFrom)
+      const people = await kyselyLRUSQLCacheInstance.execute(
+        queryBuilderSelectFrom,
+      )
 
       expect(people[0]?.first_name).to.be.eq('Max')
 
@@ -178,7 +180,9 @@ DB_CONFIGS.map((opt) => {
         .selectFrom('person')
         .selectAll()
 
-      const people = await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderTwo)
+      const people = await kyselyLRUSQLCacheInstance.execute(
+        kyselySelectQueryBuilderTwo,
+      )
 
       const countCacheAfterSecondSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
