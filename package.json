@@ -51,18 +51,18 @@
     "@types/node": "^22.10.7",
     "@types/object-hash": "^3.0.6",
     "@vitest/coverage-v8": "^3.0.2",
-    "better-sqlite3": "^11.8.0",
     "kysely-pglite-dialect": "^1.0.2",
-    "p-debounce": "^4.0.0",
     "prettier": "^3.4.2",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
     "vitest": "^3.0.2"
   },
   "dependencies": {
+    "better-sqlite3": "^11.8.1",
     "cbor": "^10.0.3",
     "kysely": "^0.27.5",
     "object-hash": "^3.0.0",
+    "p-debounce": "^4.0.0",
     "tiny-lru": "^11.2.11"
   },
   "files": [
