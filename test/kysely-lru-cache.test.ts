@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { Generated, Kysely, SqliteDialect } from 'kysely'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KyselyLRUCache } from '../src'
 
 export interface Database {
@@ -19,6 +19,9 @@ export interface PersonTable {
 
 describe('KyselyLRUCache', () => {
   let kyselyInstance: Kysely<Database>
+
+  const consoleErrorMock = vi.fn()
+  vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
 
   beforeEach(async () => {
     const sqliteDialect = new SqliteDialect({
@@ -61,8 +64,8 @@ describe('KyselyLRUCache', () => {
   it('it can be instanced with default value if options is not passed', () => {
     const kyselyLRUCacheInstance = KyselyLRUCache.createCache<Database>()
 
-    expect(kyselyLRUCacheInstance.cache?.max).to.be.eq(50)
-    expect(kyselyLRUCacheInstance.cache?.ttl).to.be.eq(60000)
+    expect(kyselyLRUCacheInstance.cache.max).to.be.eq(50)
+    expect(kyselyLRUCacheInstance.cache.ttl).to.be.eq(60000)
   })
 
   it('it has size 1 if a select is executed', async () => {
@@ -77,7 +80,7 @@ describe('KyselyLRUCache', () => {
       kyselySelectQueryBuilder,
     )
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
     expect(people[0]?.first_name).to.be.equal('Max')
   })
 
@@ -97,7 +100,7 @@ describe('KyselyLRUCache', () => {
       kyselySelectQueryBuilderTwo,
     )
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
     expect(people[0]?.first_name).to.be.equal('Max')
   })
 
@@ -115,7 +118,7 @@ describe('KyselyLRUCache', () => {
       .select('gender')
     await kyselyLRUCacheInstance.execute(kyselySelectQueryBuilderTwo)
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(2)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(2)
   })
 
   it('it has size 0 if a select is executed and then cleaned', async () => {
@@ -130,7 +133,7 @@ describe('KyselyLRUCache', () => {
 
     kyselyLRUCacheInstance.clear()
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(0)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(0)
   })
 
   it('it has size 1 if a select is executed with executeTakeFirst', async () => {
@@ -143,7 +146,7 @@ describe('KyselyLRUCache', () => {
       .selectAll()
     await kyselyLRUCacheInstance.executeTakeFirst(kyselySelectQueryBuilder)
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
   })
 
   it('it has size 1 if same select is executed twice with executeTakeFirst', async () => {
@@ -160,7 +163,7 @@ describe('KyselyLRUCache', () => {
       .selectAll()
     await kyselyLRUCacheInstance.executeTakeFirst(kyselySelectQueryBuilderTwo)
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
   })
 
   it('it has size 2 if is executed 2 different query with executeTakeFirst', async () => {
@@ -177,7 +180,7 @@ describe('KyselyLRUCache', () => {
       .select('gender')
     await kyselyLRUCacheInstance.executeTakeFirst(kyselySelectQueryBuilderTwo)
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(2)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(2)
   })
 
   it('it has size 0 if a select is executed with executeTakeFirst and then cleaned', async () => {
@@ -192,7 +195,7 @@ describe('KyselyLRUCache', () => {
 
     kyselyLRUCacheInstance.clear()
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(0)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(0)
   })
 
   it('it has size 1 if a select is executed with executeTakeFirstOrThrow', async () => {
@@ -207,7 +210,7 @@ describe('KyselyLRUCache', () => {
       kyselySelectQueryBuilder,
     )
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
   })
 
   it('it has size 1 if same select is executed twice with executeTakeFirstOrThrow', async () => {
@@ -228,7 +231,7 @@ describe('KyselyLRUCache', () => {
       kyselySelectQueryBuilderTwo,
     )
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(1)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(1)
   })
 
   it('it has size 2 if is executed 2 different query with executeTakeFirstOrThrow passing an error handler ', async () => {
@@ -252,7 +255,7 @@ describe('KyselyLRUCache', () => {
       },
     )
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(2)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(2)
   })
 
   it('it has size 0 if a select is executed with executeTakeFirstOrThrow and then cleaned', async () => {
@@ -269,6 +272,24 @@ describe('KyselyLRUCache', () => {
 
     kyselyLRUCacheInstance.clear()
 
-    expect(kyselyLRUCacheInstance.cache?.size).to.be.equal(0)
+    expect(kyselyLRUCacheInstance.cache.size).to.be.equal(0)
+  })
+
+  it('it has to write error if cache has problem when set (ex: is undefined)', async () => {
+    const kyselyLRUCacheInstance = KyselyLRUCache.createCache<Database>({
+      max: 50,
+      ttl: 60000,
+    })
+    const kyselySelectQueryBuilder = kyselyInstance
+      .selectFrom('person')
+      .selectAll()
+
+    kyselyLRUCacheInstance.cache = undefined!
+
+    await kyselyLRUCacheInstance.executeTakeFirstOrThrow(
+      kyselySelectQueryBuilder,
+    )
+
+    expect(consoleErrorMock).toBeCalledTimes(2)
   })
 })

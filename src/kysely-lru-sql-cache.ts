@@ -8,7 +8,7 @@ import { KyselyLRUCachePrimitive } from './classes/kysely-lru-cache-primitive'
 import { QueryCompilers } from './types/query-compilers'
 
 export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
-  kyselyDBCache?: Kysely<DatabaseCache>
+  kyselyDBCache: Kysely<DatabaseCache>
 
   private ttl = 60000
   private max = 50
@@ -24,25 +24,39 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
    */
   private checkForExpiredItems = pDebounce(
     async () => {
-      await this.kyselyDBCache
-        ?.deleteFrom('cache')
-        .where('expires', '<', Date.now())
-        .execute()
+      try {
+        await this.kyselyDBCache
+          .deleteFrom('cache')
+          .where('expires', '<', Date.now())
+          .execute()
+      } catch (err) {
+        console.error(
+          'KyselyLRUSQLCache: Error during delete expired items ',
+          err,
+        )
+      }
 
       if (this.max > 0) {
-        await this.kyselyDBCache
-          ?.with('lru', (db) =>
-            db
-              .selectFrom('cache')
-              .select('key')
-              .orderBy('last_access', 'desc')
-              .$if(this.queryCompiler === 'sqlite', (qb) => qb.limit(-1))
-              .$if(this.queryCompiler === 'mysql', (qb) => qb.limit(100_000))
-              .offset(this.max),
+        try {
+          await this.kyselyDBCache
+            .with('lru', (db) =>
+              db
+                .selectFrom('cache')
+                .select('key')
+                .orderBy('last_access', 'desc')
+                .$if(this.queryCompiler === 'sqlite', (qb) => qb.limit(-1))
+                .$if(this.queryCompiler === 'mysql', (qb) => qb.limit(100_000))
+                .offset(this.max),
+            )
+            .deleteFrom('cache')
+            .where('key', 'in', (qIn) => qIn.selectFrom('lru').select('key'))
+            .execute()
+        } catch (err) {
+          console.error(
+            `KyselyLRUSQLCache: Error during delete older items than first ${this.max} `,
+            err,
           )
-          .deleteFrom('cache')
-          .where('key', 'in', (qIn) => qIn.selectFrom('lru').select('key'))
-          .execute()
+        }
       }
     },
     500,
@@ -86,47 +100,17 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
    */
   private async synchronize(): Promise<void> {
     switch (this.queryCompiler) {
-      case 'sqlite':
-        await this.kyselyDBCache?.transaction().execute(async (trx) => {
-          await trx.schema
-            .createTable('cache')
-            .ifNotExists()
-            .addColumn('key', 'text', (col) => col.primaryKey())
-            .addColumn('value', 'blob')
-            .addColumn('expires', 'bigint')
-            .addColumn('last_access', 'bigint')
-            .execute()
-
-          await trx.schema
-            .createIndex('key_index')
-            .ifNotExists()
-            .unique()
-            .column('key')
-            .on('cache')
-            .execute()
-
-          await trx.schema
-            .createIndex('expires_index')
-            .ifNotExists()
-            .column('expires')
-            .on('cache')
-            .execute()
-
-          return trx.schema
-            .createIndex('last_access_index')
-            .ifNotExists()
-            .column('last_access')
-            .on('cache')
-            .execute()
-        })
-        break
       case 'postgres':
-        await this.kyselyDBCache?.transaction().execute(async (trx) => {
+      case 'sqlite':
+        await this.kyselyDBCache.transaction().execute(async (trx) => {
           await trx.schema
             .createTable('cache')
             .ifNotExists()
             .addColumn('key', 'text', (col) => col.primaryKey())
-            .addColumn('value', 'bytea')
+            .addColumn(
+              'value',
+              this.queryCompiler === 'sqlite' ? 'blob' : 'bytea',
+            )
             .addColumn('expires', 'bigint')
             .addColumn('last_access', 'bigint')
             .execute()
@@ -134,7 +118,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
           await trx.schema
             .createIndex('key_index')
             .ifNotExists()
-            .unique()
             .column('key')
             .on('cache')
             .execute()
@@ -146,16 +129,23 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .on('cache')
             .execute()
 
-          return trx.schema
+          await trx.schema
             .createIndex('last_access_index')
             .ifNotExists()
             .column('last_access')
+            .on('cache')
+            .execute()
+
+          return trx.schema
+            .createIndex('key_expires_index')
+            .ifNotExists()
+            .columns(['key', 'expires'])
             .on('cache')
             .execute()
         })
         break
       case 'mysql':
-        await this.kyselyDBCache?.transaction().execute(async (trx) => {
+        await this.kyselyDBCache.transaction().execute(async (trx) => {
           await trx.schema
             .createTable('cache')
             .ifNotExists()
@@ -165,32 +155,23 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .addColumn('last_access', 'bigint')
             .execute()
 
-          const checkKeyIndexCount = await trx
-            .selectFrom(<any>'information_schema.statistics')
-            .select(({ fn }) => [fn.count<number>('index_name').as('count')])
-            .where('table_schema', '=', 'DATABASE()')
-            .where('index_name', '=', 'key_index')
-            .where('table_name', '=', 'cache')
-            .executeTakeFirst()
+          const sqlStatementShowIndexKeyIndeces = await sql<
+            any[]
+          >`SHOW INDEX FROM cache WHERE Key_name = key_index`.execute(trx)
 
-          if (checkKeyIndexCount && checkKeyIndexCount.count > 1) {
+          if (sqlStatementShowIndexKeyIndeces?.rows?.length === 0) {
             await trx.schema
               .createIndex('key_index')
-              .unique()
               .column('key')
               .on('cache')
               .execute()
           }
 
-          const checkExpiredIndexCount = await trx
-            .selectFrom(<any>'information_schema.statistics')
-            .select(({ fn }) => [fn.count<number>('index_name').as('count')])
-            .where('table_schema', '=', 'DATABASE()')
-            .where('index_name', '=', 'expires_index')
-            .where('table_name', '=', 'cache')
-            .executeTakeFirst()
+          const sqlStatementShowIndexExpiresIndeces = await sql<
+            any[]
+          >`SHOW INDEX FROM cache WHERE Key_name = expires_index`.execute(trx)
 
-          if (checkExpiredIndexCount && checkExpiredIndexCount.count > 1) {
+          if (sqlStatementShowIndexExpiresIndeces?.rows?.length === 0) {
             await trx.schema
               .createIndex('expires_index')
               .column('expires')
@@ -198,21 +179,30 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
               .execute()
           }
 
-          const checkLastAccessIndexCount = await trx
-            .selectFrom(<any>'information_schema.statistics')
-            .select(({ fn }) => [fn.count<number>('index_name').as('count')])
-            .where('table_schema', '=', 'DATABASE()')
-            .where('index_name', '=', 'last_access_index')
-            .where('table_name', '=', 'cache')
-            .executeTakeFirst()
+          const sqlStatementShowIndexLastAccessIndeces = await sql<
+            any[]
+          >`SHOW INDEX FROM cache WHERE Key_name = last_access_index`.execute(
+            trx,
+          )
 
-          if (
-            checkLastAccessIndexCount &&
-            checkLastAccessIndexCount.count > 1
-          ) {
+          if (sqlStatementShowIndexLastAccessIndeces?.rows?.length === 0) {
             await trx.schema
               .createIndex('last_access_index')
               .column('last_access')
+              .on('cache')
+              .execute()
+          }
+
+          const sqlStatementShowIndexKeyExpiresIndeces = await sql<
+            any[]
+          >`SHOW INDEX FROM cache WHERE Key_name = key_expires_index`.execute(
+            trx,
+          )
+
+          if (sqlStatementShowIndexKeyExpiresIndeces?.rows?.length === 0) {
+            await trx.schema
+              .createIndex('key_expires_index')
+              .columns(['key', 'expires'])
               .on('cache')
               .execute()
           }
@@ -237,42 +227,46 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
     const expires = Date.now() + this.ttl
 
-    switch (this.queryCompiler) {
-      case 'sqlite':
-      case 'postgres':
-        await this.kyselyDBCache
-          ?.insertInto('cache')
-          .values({
-            key: hashQueryBuilder,
-            value: encodedValue,
-            expires,
-            last_access: Date.now(),
-          })
-          .onConflict((cfclt) =>
-            cfclt.column('key').doUpdateSet({
+    try {
+      switch (this.queryCompiler) {
+        case 'sqlite':
+        case 'postgres':
+          await this.kyselyDBCache
+            .insertInto('cache')
+            .values({
+              key: hashQueryBuilder,
               value: encodedValue,
               expires,
               last_access: Date.now(),
-            }),
-          )
-          .execute()
-        break
-      case 'mysql':
-        await this.kyselyDBCache
-          ?.insertInto('cache')
-          .values({
-            key: hashQueryBuilder,
-            value: encodedValue,
-            expires,
-            last_access: Date.now(),
-          })
-          .onDuplicateKeyUpdate({
-            value: encodedValue,
-            expires,
-            last_access: Date.now(),
-          })
-          .execute()
-        break
+            })
+            .onConflict((cfclt) =>
+              cfclt.column('key').doUpdateSet({
+                value: encodedValue,
+                expires,
+                last_access: Date.now(),
+              }),
+            )
+            .execute()
+          break
+        case 'mysql':
+          await this.kyselyDBCache
+            .insertInto('cache')
+            .values({
+              key: hashQueryBuilder,
+              value: encodedValue,
+              expires,
+              last_access: Date.now(),
+            })
+            .onDuplicateKeyUpdate({
+              value: encodedValue,
+              expires,
+              last_access: Date.now(),
+            })
+            .execute()
+          break
+      }
+    } catch (err) {
+      console.error('KyselyLRUSQLCache: Error during setting data in DB ', err)
     }
 
     setImmediate(this.checkForExpiredItems.bind(this))
@@ -287,54 +281,61 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
       | Omit<TableCache, 'key' | 'expires' | 'last_access'>
       | undefined
 
-    switch (this.queryCompiler) {
-      case 'sqlite':
-      case 'postgres':
-        getSQLResult = await this.kyselyDBCache
-          ?.updateTable('cache')
-          .set({ last_access: Date.now() })
-          .where(({ and, eb, or }) =>
-            and([
-              eb('key', '=', this.hashQueryBuilder(queryBuilder)),
-              or([eb('expires', '>', Date.now()), eb('expires', 'is', null)]),
-            ]),
-          )
-          .returning(['value'])
-          .executeTakeFirst()
-        break
-      case 'mysql':
-        getSQLResult = await this.kyselyDBCache
-          ?.transaction()
-          .execute(async (trx) => {
-            await trx
-              ?.updateTable('cache')
-              .set({ last_access: Date.now() })
-              .where(({ and, eb, or }) =>
-                and([
-                  eb('key', '=', this.hashQueryBuilder(queryBuilder)),
-                  or([
-                    eb('expires', '>', Date.now()),
-                    eb('expires', 'is', null),
+    try {
+      switch (this.queryCompiler) {
+        case 'sqlite':
+        case 'postgres':
+          getSQLResult = await this.kyselyDBCache
+            .updateTable('cache')
+            .set({ last_access: Date.now() })
+            .where(({ and, eb, or }) =>
+              and([
+                eb('key', '=', this.hashQueryBuilder(queryBuilder)),
+                or([eb('expires', '>', Date.now()), eb('expires', 'is', null)]),
+              ]),
+            )
+            .returning(['value'])
+            .executeTakeFirst()
+          break
+        case 'mysql':
+          getSQLResult = await this.kyselyDBCache
+            .transaction()
+            .execute(async (trx) => {
+              await trx
+                .updateTable('cache')
+                .set({ last_access: Date.now() })
+                .where(({ and, eb, or }) =>
+                  and([
+                    eb('key', '=', this.hashQueryBuilder(queryBuilder)),
+                    or([
+                      eb('expires', '>', Date.now()),
+                      eb('expires', 'is', null),
+                    ]),
                   ]),
-                ]),
-              )
-              .execute()
+                )
+                .execute()
 
-            return trx
-              .selectFrom('cache')
-              .select(['value'])
-              .where(({ and, eb, or }) =>
-                and([
-                  eb('key', '=', this.hashQueryBuilder(queryBuilder)),
-                  or([
-                    eb('expires', '>', Date.now()),
-                    eb('expires', 'is', null),
+              return trx
+                .selectFrom('cache')
+                .select(['value'])
+                .where(({ and, eb, or }) =>
+                  and([
+                    eb('key', '=', this.hashQueryBuilder(queryBuilder)),
+                    or([
+                      eb('expires', '>', Date.now()),
+                      eb('expires', 'is', null),
+                    ]),
                   ]),
-                ]),
-              )
-              .executeTakeFirst()
-          })
-        break
+                )
+                .executeTakeFirst()
+            })
+          break
+      }
+    } catch (err) {
+      console.error(
+        'KyselyLRUSQLCache: Error during getting data from DB ',
+        err,
+      )
     }
 
     return getSQLResult?.value
@@ -347,7 +348,12 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
    */
   async clear(): Promise<void> {
     this.checkIfDestroyed()
-    await this.kyselyDBCache?.deleteFrom('cache').execute()
+
+    try {
+      await this.kyselyDBCache.deleteFrom('cache').execute()
+    } catch (err) {
+      console.error('KyselyLRUSQLCache: Error during cache clean ', err)
+    }
   }
 
   /**
@@ -356,7 +362,7 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
   async destroy(): Promise<void> {
     await this.clear()
     clearInterval(this.checkInterval)
-    this.kyselyDBCache?.destroy()
+    this.kyselyDBCache.destroy()
     this.isDestroyed = true
   }
 
@@ -365,7 +371,7 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
    */
   private checkIfDestroyed(): void {
     if (this.isDestroyed) {
-      throw new Error('Cache has been destroyed')
+      throw new Error('KyselyLRUSQLCache: Cache has been destroyed')
     }
   }
 }
