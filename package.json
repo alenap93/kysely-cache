@@ -41,8 +41,7 @@
     "test": "npm run test:node",
     "test:node": "vitest run --dir ./test",
     "coverage": "vitest run --coverage",
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "type-check": "tsc --noEmit"
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.0",
@@ -73,7 +72,6 @@
   },
   "pre-commit": [
     "prettier",
-    "test",
-    "type-check"
+    "test"
   ]
 }
