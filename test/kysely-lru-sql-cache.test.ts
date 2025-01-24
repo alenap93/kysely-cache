@@ -1,5 +1,5 @@
-import { Generated, Kysely, SqliteDialect } from 'kysely'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DeleteResult, Generated, Kysely, SqliteDialect } from 'kysely'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KyselyLRUSQLCache } from '../src'
 import { DB_CONFIGS } from './util/db-utils'
 import Database from 'better-sqlite3'
@@ -49,6 +49,7 @@ DB_CONFIGS.map((opt) => {
     })
 
     afterEach(async () => {
+      vi.restoreAllMocks()
       await kyselyInstance.destroy()
     })
 
@@ -76,7 +77,7 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
@@ -114,7 +115,7 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
@@ -124,7 +125,7 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterClear =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
@@ -149,7 +150,7 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterFirstSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
@@ -159,7 +160,7 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterSecondSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
@@ -186,12 +187,128 @@ DB_CONFIGS.map((opt) => {
 
       const countCacheAfterSecondSelect =
         (await kyselyLRUSQLCacheInstance.kyselyDBCache
-          ?.selectFrom('cache')
+          .selectFrom('cache')
           .select(({ fn }) => [fn.count<number>('key').as('count')])
           .executeTakeFirst())!
 
       expect(+countCacheAfterSecondSelect.count).to.be.eq(1)
       expect(people[0]?.first_name).to.be.equal('Max')
     })
+
+    it('it has console.error a string if clear go in error', async () => {
+      const kyselyLRUSQLCacheInstance =
+        await KyselyLRUSQLCache.createCache<Database>(opt.config)
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'deleteFrom',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      const consoleErrorMock = vi.fn()
+      vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
+
+      await kyselyLRUSQLCacheInstance.clear()
+
+      expect(consoleErrorMock).toBeCalled()
+    })
+    it('it has console.error a string if set go in error', async () => {
+      const kyselyLRUSQLCacheInstance =
+        await KyselyLRUSQLCache.createCache<Database>(opt.config)
+
+      const kyselySelectQueryBuilderOne = kyselyInstance
+        .selectFrom('person')
+        .selectAll()
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'insertInto',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      const consoleErrorMock = vi.fn()
+      vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
+
+      await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderOne)
+
+      expect(consoleErrorMock).toBeCalled()
+    })
+
+    it('it has console.error a string if get go in error', async () => {
+      const kyselyLRUSQLCacheInstance =
+        await KyselyLRUSQLCache.createCache<Database>(opt.config)
+
+      const kyselySelectQueryBuilderOne = kyselyInstance
+        .selectFrom('person')
+        .selectAll()
+
+      await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderOne)
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'updateTable',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'transaction',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      const consoleErrorMock = vi.fn()
+      vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
+
+      await kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilderOne)
+
+      expect(consoleErrorMock).toBeCalled()
+    })
+
+    it('it has console.error a string if clean expired items or clean oldest items go in error', async () => {
+      const kyselyLRUSQLCacheInstance =
+        await KyselyLRUSQLCache.createCache<Database>({
+          ...opt.config,
+          max: 1,
+        })
+
+      const firstQueryBuilder = kyselyInstance.selectFrom('person').selectAll()
+      const secondQueryBuilder = kyselyInstance
+        .selectFrom('person')
+        .select('gender')
+
+      await kyselyLRUSQLCacheInstance.execute(firstQueryBuilder)
+
+      await kyselyLRUSQLCacheInstance.execute(secondQueryBuilder)
+
+      await kyselyLRUSQLCacheInstance.kyselyDBCache
+        .selectFrom('cache')
+        .select(({ fn }) => [fn.count<number>('key').as('count')])
+        .executeTakeFirst()
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'deleteFrom',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      vi.spyOn(
+        kyselyLRUSQLCacheInstance.kyselyDBCache,
+        'with',
+      ).mockImplementation(() => {
+        throw new Error('TEST')
+      })
+
+      const consoleErrorMock = vi.fn()
+      vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
+
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      expect(consoleErrorMock).toBeCalled()
+    }, 10000)
   })
 })
