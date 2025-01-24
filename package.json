@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.0",
+    "@fastify/pre-commit": "^2.2.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.7",
     "@types/object-hash": "^3.0.6",
