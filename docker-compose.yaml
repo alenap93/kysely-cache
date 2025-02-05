@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: kysely
+      MYSQL_DATABASE: kysely-cache_test
+      MYSQL_USER: kysely
+      MYSQL_PASSWORD: kysely
+    ports:
+      - "3306:3306"

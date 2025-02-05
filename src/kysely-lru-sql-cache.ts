@@ -12,6 +12,8 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
   private ttl = 60000
   private max = 50
+  private debounceTime = 1000
+  private intervalCheckTime = 60000
 
   private queryCompiler: QueryCompilers = 'sqlite'
 
@@ -22,53 +24,21 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
   /**
    * check the expired items
    */
-  private checkForExpiredItems = pDebounce(
-    async () => {
-      try {
-        await this.kyselyDBCache
-          .deleteFrom('cache')
-          .where('expires', '<', Date.now())
-          .execute()
-      } catch (err) {
-        console.error(
-          'KyselyLRUSQLCache: Error during delete expired items ',
-          err,
-        )
-      }
-
-      if (this.max > 0) {
-        try {
-          await this.kyselyDBCache
-            .with('lru', (db) =>
-              db
-                .selectFrom('cache')
-                .select('key')
-                .orderBy('last_access', 'desc')
-                .$if(this.queryCompiler === 'sqlite', (qb) => qb.limit(-1))
-                .$if(this.queryCompiler === 'mysql', (qb) => qb.limit(100_000))
-                .offset(this.max),
-            )
-            .deleteFrom('cache')
-            .where('key', 'in', (qIn) => qIn.selectFrom('lru').select('key'))
-            .execute()
-        } catch (err) {
-          console.error(
-            `KyselyLRUSQLCache: Error during delete older items than first ${this.max} `,
-            err,
-          )
-        }
-      }
-    },
-    500,
-    {
-      before: true,
-    },
+  private checkForExpiredItemsDebounced = pDebounce(
+    this.checkForExpiredItems,
+    this.debounceTime,
   )
 
   private constructor(opts: LRUCacheSQLOpts = {}) {
     super()
+
     this.max = opts.max ?? this.max
     this.ttl = opts.ttl ?? this.ttl
+    this.intervalCheckTime = opts.intervalCheckTime ?? this.intervalCheckTime
+    this.debounceTime =
+      opts.debounceTime === null || opts.debounceTime === undefined
+        ? this.debounceTime
+        : opts.debounceTime
     this.queryCompiler = opts.queryCompiler ?? 'sqlite'
     if (!opts.dialect) {
       opts.dialect = new SqliteDialect({
@@ -116,13 +86,6 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .execute()
 
           await trx.schema
-            .createIndex('key_index')
-            .ifNotExists()
-            .column('key')
-            .on('cache')
-            .execute()
-
-          await trx.schema
             .createIndex('expires_index')
             .ifNotExists()
             .column('expires')
@@ -155,21 +118,9 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
             .addColumn('last_access', 'bigint')
             .execute()
 
-          const sqlStatementShowIndexKeyIndeces = await sql<
-            any[]
-          >`SHOW INDEX FROM cache WHERE Key_name = key_index`.execute(trx)
-
-          if (sqlStatementShowIndexKeyIndeces?.rows?.length === 0) {
-            await trx.schema
-              .createIndex('key_index')
-              .column('key')
-              .on('cache')
-              .execute()
-          }
-
           const sqlStatementShowIndexExpiresIndeces = await sql<
             any[]
-          >`SHOW INDEX FROM cache WHERE Key_name = expires_index`.execute(trx)
+          >`SHOW INDEX FROM cache WHERE Key_name = 'expires_index'`.execute(trx)
 
           if (sqlStatementShowIndexExpiresIndeces?.rows?.length === 0) {
             await trx.schema
@@ -181,7 +132,7 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
 
           const sqlStatementShowIndexLastAccessIndeces = await sql<
             any[]
-          >`SHOW INDEX FROM cache WHERE Key_name = last_access_index`.execute(
+          >`SHOW INDEX FROM cache WHERE Key_name = 'last_access_index'`.execute(
             trx,
           )
 
@@ -192,27 +143,13 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
               .on('cache')
               .execute()
           }
-
-          const sqlStatementShowIndexKeyExpiresIndeces = await sql<
-            any[]
-          >`SHOW INDEX FROM cache WHERE Key_name = key_expires_index`.execute(
-            trx,
-          )
-
-          if (sqlStatementShowIndexKeyExpiresIndeces?.rows?.length === 0) {
-            await trx.schema
-              .createIndex('key_expires_index')
-              .columns(['key', 'expires'])
-              .on('cache')
-              .execute()
-          }
         })
         break
     }
 
     this.checkInterval = setInterval(async () => {
       await this.checkForExpiredItems()
-    }, 5000)
+    }, this.intervalCheckTime)
 
     await this.clear()
   }
@@ -269,7 +206,9 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
       console.error('KyselyLRUSQLCache: Error during setting data in DB ', err)
     }
 
-    setImmediate(this.checkForExpiredItems.bind(this))
+    if (this.debounceTime) {
+      setImmediate(this.checkForExpiredItemsDebounced.bind(this))
+    }
   }
 
   protected async get<T extends keyof DB, O>(
@@ -372,6 +311,43 @@ export class KyselyLRUSQLCache<DB> extends KyselyLRUCachePrimitive<DB> {
   private checkIfDestroyed(): void {
     if (this.isDestroyed) {
       throw new Error('KyselyLRUSQLCache: Cache has been destroyed')
+    }
+  }
+
+  private async checkForExpiredItems(): Promise<void> {
+    try {
+      await this.kyselyDBCache
+        .deleteFrom('cache')
+        .where('expires', '<', Date.now())
+        .execute()
+    } catch (err) {
+      console.error(
+        'KyselyLRUSQLCache: Error during delete expired items ',
+        err,
+      )
+    }
+
+    if (this.max > 0) {
+      try {
+        await this.kyselyDBCache
+          .with('lru', (db) =>
+            db
+              .selectFrom('cache')
+              .select('key')
+              .orderBy('last_access', 'desc')
+              .$if(this.queryCompiler === 'sqlite', (qb) => qb.limit(-1))
+              .$if(this.queryCompiler === 'mysql', (qb) => qb.limit(100_000))
+              .offset(this.max),
+          )
+          .deleteFrom('cache')
+          .where('key', 'in', (qIn) => qIn.selectFrom('lru').select('key'))
+          .execute()
+      } catch (err) {
+        console.error(
+          `KyselyLRUSQLCache: Error during delete older items than first ${this.max} `,
+          err,
+        )
+      }
     }
   }
 }

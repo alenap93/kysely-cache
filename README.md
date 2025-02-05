@@ -27,6 +27,8 @@ This cache stores data inside a DB (sqlite, mysql or postgres) and sets a cached
 
 - max:  *max number of items (query results) in cache, default 50*
 - ttl:  *time to live (milliseconds), default: 60000*
+- debounceTime:  *debounce time (ms) to wait for expired items check after single "set" value in cache, if 0 no check will be done after the set, default: 1000*
+- intervalCheckTime:  *interval time (ms) between each expired items check (further to check after the "set" value in cache), default: 60000*
 - dialect:  *Kysely Dialect, default: SQLite Dialect with in memory DB*
 - queryCompiler:  *sqlite, mysql or postgres, default: sqlite*
 
@@ -85,6 +87,48 @@ This cache keeps data in memory (inside an object) and sets a cache query (and r
 
 - clear(): *clear the cache, return: void*
 - createCache(opts): *create the cache, return: KyselyLRUCache\<DB\>*
+- execute(queryBuilder: SelectQueryBuilder): *execute the query or return data from the cache as a list of items*
+- executeTakeFirst(queryBuilder: SelectQueryBuilder): *execute the query or return data from the cache, it return only the first element*
+- executeTakeFirstOrThrow(queryBuilder: SelectQueryBuilder, errorConstructor:  NoResultErrorConstructor): *execute the query or return data from the cache, it return only the first element, if no element will be found, it will throw an error*
+
+**How to use**
+
+    const sqliteDialect = new SqliteDialect( { database: new  Database(':memory:') } )
+    
+    const kyselyInstance = new Kysely<Database>( { dialect:  sqliteDialect } )
+    
+    await kyselyInstance.schema.createTable('person')
+    .addColumn('id', 'integer', (col) =>  col.primaryKey())
+    .addColumn('first_name', 'varchar(255)')
+    .addColumn('last_name', 'varchar(255)')
+    .addColumn('gender', 'varchar(255)')
+    .execute()
+    
+    await kyselyInstance.insertInto('person').values( { first_name: 'Max', last_name: 'Jack', gender: 'man' } )
+    .execute()
+    
+    const kyselyLRUCacheInstance = KyselyLRUCache.createCache<Database>( { max: 50, ttl: 60000 } )
+    
+    const kyselySelectQueryBuilderOne = kyselyInstance.selectFrom('person').selectAll()
+    const persone = await KyselyLRUCacheInstance.executeTakeFirstOrThrow(kyselySelectQueryBuilderOne)
+
+### KyselyLRUKeyVCache
+
+**Description**
+
+This cache keeps data using KeyV storage, with this cache you have to use KeyV options of the different stores
+
+**Options**
+
+- store: *The storage adapter instance to be used by Keyv.*
+- ttl: *TTL, default: 60000*
+- compression: *Enable compression options*
+
+**Api**
+
+- clear(): *clear the cache, return: void*
+- disconnect(): *clear the cache and release all resources and disconnects from the cache database, return: Promise\<void\>*
+- createCache(opts): *create the cache, return: KyselyLRUKeyVCache\<DB\>*
 - execute(queryBuilder: SelectQueryBuilder): *execute the query or return data from the cache as a list of items*
 - executeTakeFirst(queryBuilder: SelectQueryBuilder): *execute the query or return data from the cache, it return only the first element*
 - executeTakeFirstOrThrow(queryBuilder: SelectQueryBuilder, errorConstructor:  NoResultErrorConstructor): *execute the query or return data from the cache, it return only the first element, if no element will be found, it will throw an error*

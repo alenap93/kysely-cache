@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { Generated, Kysely, SqliteDialect } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { KyselyLRUCache } from '../src'
+import { KyselyLRUCache } from '../../src'
 
 export interface Database {
   person: PersonTable
@@ -19,9 +19,6 @@ export interface PersonTable {
 
 describe('KyselyLRUCache', () => {
   let kyselyInstance: Kysely<Database>
-
-  const consoleErrorMock = vi.fn()
-  vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
 
   beforeEach(async () => {
     const sqliteDialect = new SqliteDialect({
@@ -49,6 +46,7 @@ describe('KyselyLRUCache', () => {
   })
 
   afterEach(async () => {
+    vi.restoreAllMocks()
     await kyselyInstance.destroy()
   })
 
@@ -283,6 +281,9 @@ describe('KyselyLRUCache', () => {
     const kyselySelectQueryBuilder = kyselyInstance
       .selectFrom('person')
       .selectAll()
+
+    const consoleErrorMock = vi.fn()
+    vi.spyOn(console, 'error').mockImplementation(consoleErrorMock)
 
     kyselyLRUCacheInstance.cache = undefined!
 

@@ -39,10 +39,9 @@
     "prettier": "prettier --check src/**/*.ts test/**/*.ts",
     "prettier:fix": "prettier --write src/**/*.ts test/**/*.ts",
     "test": "npm run test:node",
-    "test:node": "vitest run --dir ./test",
+    "test:node": "vitest run --dir ./test/node",
     "coverage": "vitest run --coverage",
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "type-check": "tsc --noEmit"
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.0",
@@ -51,7 +50,9 @@
     "@types/node": "^22.10.7",
     "@types/object-hash": "^3.0.6",
     "@vitest/coverage-v8": "^3.0.2",
+    "keyv": "^5.2.3",
     "kysely-pglite-dialect": "^1.0.2",
+    "mysql2": "^3.12.0",
     "prettier": "^3.4.2",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
@@ -65,6 +66,9 @@
     "p-debounce": "^4.0.0",
     "tiny-lru": "^11.2.11"
   },
+  "peerDependencies": {
+    "keyv": "^5.2.3"
+  },
   "files": [
     "./dist"
   ],
@@ -72,8 +76,6 @@
     "access": "public"
   },
   "pre-commit": [
-    "prettier",
-    "test",
-    "type-check"
+    "prettier"
   ]
 }

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { Generated, Kysely, SelectQueryBuilder, SqliteDialect } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { KyselyLRUCachePrimitive } from '../src'
+import { KyselyLRUCachePrimitive } from '../../src'
 
 export interface Database {
   person: PersonTable

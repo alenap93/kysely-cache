@@ -1,6 +1,6 @@
-import { DeleteResult, Generated, Kysely, SqliteDialect } from 'kysely'
+import { Generated, Kysely, SqliteDialect } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { KyselyLRUSQLCache } from '../src'
+import { KyselyLRUSQLCache } from '../../src'
 import { DB_CONFIGS } from './util/db-utils'
 import Database from 'better-sqlite3'
 
@@ -96,7 +96,7 @@ DB_CONFIGS.map((opt) => {
 
       await expect(
         kyselyLRUSQLCacheInstance.execute(kyselySelectQueryBuilder),
-      ).rejects.toThrowError('Cache has been destroyed')
+      ).rejects.toThrowError('KyselyLRUSQLCache: Cache has been destroyed')
     })
 
     it('it has 1 record in cache after a select if executed, and has 0 record after it is cleared', async () => {
