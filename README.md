@@ -1,13 +1,13 @@
 
 # kysely-cache
 
-[![CI](https://github.com/alenap93/kysely-cache/actions/workflows/ci.yml/badge.svg)](https://github.com/alenap93/kysely-cache/actions/workflows/ci.yml)
+[![CI](https://github.com/alenap93/kysely-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/alenap93/kysely-cache/actions/workflows/tests.yml)
 [![NPM version](https://img.shields.io/npm/v/kysely-cache.svg?style=flat)](https://www.npmjs.com/package/kysely-cache)
 [![NPM downloads](https://img.shields.io/npm/dm/kysely-cache.svg?style=flat)](https://www.npmjs.com/package/kysely-cache)
 [![js-prettier-style](https://img.shields.io/badge/code%20style-prettier-brightgreen.svg?style=flat)](https://prettier.io/)
 
 Kysely Cache plugin; with this plugin you can cache a query and make next queries faster, that will not go directly to the database, but will be getted from the cache.
-This plugin has two different implementation **KyselyLRUSQLCache** and **KyselyLRUCache**.
+This plugin has three different implementation **KyselyLRUSQLCache**, **KyselyLRUCache** and **KyselyLRUKeyVCache**.
 
 ## Install
 
@@ -117,6 +117,10 @@ This cache keeps data in memory (inside an object) and sets a cache query (and r
 **Description**
 
 This cache keeps data using KeyV storage, with this cache you have to use KeyV options of the different stores
+
+***This cache needs KeyV!***
+
+    npm i --save keyv
 
 **Options**
 
