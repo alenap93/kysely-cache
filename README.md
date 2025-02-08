@@ -153,10 +153,10 @@ This cache keeps data using KeyV storage, with this cache you have to use KeyV o
     await kyselyInstance.insertInto('person').values( { first_name: 'Max', last_name: 'Jack', gender: 'man' } )
     .execute()
     
-    const kyselyLRUCacheInstance = KyselyLRUKeyVCacheInstance.createCache<Database>( { ttl: 60000 } )
+    const kyselyLRUKeyVCacheInstance = KyselyLRUKeyVCache.createCache<Database>( { ttl: 60000 } )
     
     const kyselySelectQueryBuilderOne = kyselyInstance.selectFrom('person').selectAll()
-    const persone = await kyselyLRUCacheInstance.executeTakeFirstOrThrow(kyselySelectQueryBuilderOne)
+    const persone = await kyselyLRUKeyVCacheInstance.executeTakeFirstOrThrow(kyselySelectQueryBuilderOne)
 
 
 ## License
