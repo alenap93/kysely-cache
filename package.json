@@ -59,7 +59,7 @@
     "vitest": "^3.0.2"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.2.0",
     "cbor": "^10.0.3",
     "kysely": "^0.28.2",
     "object-hash": "^3.0.0",
